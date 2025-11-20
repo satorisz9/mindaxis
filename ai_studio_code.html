@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindAxis - Aurora Edition (Fixed)</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts (Rounded Mplus) -->
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@300;400;500;700&display=swap"
+        rel="stylesheet">
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin
+        src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+
+    <!-- Babel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"M PLUS Rounded 1c"', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#9F7AEA',   // Soft Purple
+                        secondary: '#F687B3', // Soft Pink
+                    },
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                        'breathe': 'breathe 4s ease-in-out infinite',
+                        'fade-in': 'fadeIn 0.6s ease-out forwards',
+                        'slide-up': 'slideUp 0.5s ease-out forwards',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        },
+                        breathe: {
+                            '0%, 100%': { transform: 'scale(1)', opacity: '0.8' },
+                            '50%': { transform: 'scale(1.05)', opacity: '1' },
+                        },
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #F7FAFC;
+            margin: 0;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root" class="h-screen w-screen flex items-center justify-center text-slate-400">Loading...</div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- Icons ---
+        const Icon = ({ name, size = 24, color = "currentColor" }) => {
+            const paths = {
+                Home: <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
+                Feather: <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z M16 8L2 22 M17.5 15H9" />,
+                HeartHand: <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />,
+                Send: <><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></>,
+                Refresh: <><path d="M23 4v6h-6 M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></>,
+                Share: <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8 M16 6l-4-4-4 4 M12 2v13" />,
+            };
+            return (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    {paths[name] || <circle cx="12" cy="12" r="10" />}
+                </svg>
+            );
+        };
+
+        // --- Data & Logic ---
+
+        // 50 Questions: MBTI (4 axes), Thinking (Visual/Verbal), Memory (Aphantasia/Hyper)
+        // Dimensions: 
+        // EI: Extrovert/Introvert
+        // SN: Sensing/Intuition
+        // TF: Thinking/Feeling
+        // JP: Judging/Perceiving
+        // V: Visual (Hyperphantasia) vs Abstract (Aphantasia)
+        // M: Mindset (Future/Past)
+
+        const QUESTIONS = [
+            // Phase 1: Energy & Focus (EI)
+            { id: 1, text: "週末は一人で静かに過ごすよりも、賑やかな場所で人と会いたい。", type: "EI", weight: 1 },
+            { id: 2, text: "考えをまとめる前に、まず話し始めてしまうことが多い。", type: "EI", weight: 1 },
+            { id: 3, text: "注目を浴びることは、それほど苦ではない。", type: "EI", weight: 1 },
+            { id: 4, text: "新しい環境では、自分から積極的に話しかける方だ。", type: "EI", weight: 1 },
+            { id: 5, text: "友人と長時間過ごすと、疲れよりも活力を感じる。", type: "EI", weight: 1 },
+
+            // Phase 2: Information & Perception (SN)
+            { id: 6, text: "物事を説明する時、具体的な事実よりも全体像や意味から話す。", type: "SN", weight: 1 }, // +SN = N
+            { id: 7, text: "「何が起きているか」よりも「なぜ起きているか」に興味がある。", type: "SN", weight: 1 },
+            { id: 8, text: "現実的なデータよりも、将来の可能性や空想に惹かれる。", type: "SN", weight: 1 },
+            { id: 9, text: "詳細な手順書よりも、大まかなコンセプトだけ示される方が動きやすい。", type: "SN", weight: 1 },
+            { id: 10, text: "森を見た時、木の種類よりも森全体の雰囲気や物語を感じる。", type: "SN", weight: 1 },
+
+            // Phase 3: Decision Making (TF)
+            { id: 11, text: "決断を下す時、論理的な正しさよりも、周囲との調和を優先する。", type: "TF", weight: 1 }, // +TF = F
+            { id: 12, text: "友人が悩んでいる時、解決策を出すより先に共感して話を聞く。", type: "TF", weight: 1 },
+            { id: 13, text: "議論において、真実を追求することより、誰も傷つけないことが重要だ。", type: "TF", weight: 1 },
+            { id: 14, text: "批判されると、内容の妥当性を考える前に感情的に傷ついてしまう。", type: "TF", weight: 1 },
+            { id: 15, text: "公平さとは、全員に同じルールを適用することではなく、個々の事情を汲むことだと思う。", type: "TF", weight: 1 },
+
+            // Phase 4: Lifestyle (JP)
+            { id: 16, text: "旅行の計画はきっちり立てるよりも、行き当たりばったりを楽しみたい。", type: "JP", weight: 1 }, // +JP = P
+            { id: 17, text: "机の上や部屋は、整理整頓されているより散らかっていることが多い。", type: "JP", weight: 1 },
+            { id: 18, text: "締め切りは余裕を持って終わらせるより、ギリギリまで粘って仕上げる。", type: "JP", weight: 1 },
+            { id: 19, text: "休日の予定は事前に決めるより、その時の気分で決めたい。", type: "JP", weight: 1 },
+            { id: 20, text: "ルールやマニュアルは絶対的なものではなく、単なるガイドラインだと思う。", type: "JP", weight: 1 },
+
+            // Phase 5: Visual Texture (Aphantasia - Hyperphantasia)
+            { id: 21, text: "「赤いリンゴ」を想像した時、写真のように鮮明な映像が見える。", type: "V", weight: 1 },
+            { id: 22, text: "過去の思い出は、映画のシーンのようにありありと再生できる。", type: "V", weight: 1 },
+            { id: 23, text: "小説を読んでいると、情景が目の前にリアルに広がる。", type: "V", weight: 1 },
+            { id: 24, text: "親しい人の顔を思い浮かべる時、細部まで鮮明に見える。", type: "V", weight: 1 },
+            { id: 25, text: "空想の世界に没入しすぎて、現実との境界が曖昧になることがある。", type: "V", weight: 1 },
+
+            // Phase 6: Thinking Style (Verbal vs Conceptual)
+            { id: 26, text: "考え事をする時、頭の中で言葉（独り言）を使わずに、イメージや感覚で進めることが多い。", type: "M", weight: 1 }, // +M = Conceptual
+            { id: 27, text: "複雑な概念を理解する時、論理的な説明より図解や例え話の方が分かりやすい。", type: "M", weight: 1 },
+            { id: 28, text: "アイデアが浮かぶ時は、言葉ではなく全体像がパッと閃く感じだ。", type: "M", weight: 1 },
+            { id: 29, text: "文章を読む時、頭の中で音読するよりも、文字の形や意味を直接捉える。", type: "M", weight: 1 },
+            { id: 30, text: "「無」を想像する時、「無」という言葉ではなく、暗闇や静寂の感覚が浮かぶ。", type: "M", weight: 1 },
+
+            // Phase 7: Deep Dive (Abstract/Essence)
+            { id: 31, text: "世界は「構造と法則」ではなく、「感情と物語」でできていると感じる。", type: "TF", weight: 1 }, // +TF
+            { id: 32, text: "孤独は寂しいものではなく、自由で快適なものだと感じる。", type: "EI", weight: -1 }, // -EI (Introvert)
+            { id: 33, text: "時間は直線的に流れるものではなく、伸縮したり循環したりするものだと感じる。", type: "JP", weight: 1 }, // +JP
+            { id: 34, text: "正義とは、揺るぎない原則ではなく、状況に応じた慈悲だと思う。", type: "TF", weight: 1 }, // +TF
+            { id: 35, text: "変化は脅威ではなく、楽しむべき機会だと感じる。", type: "JP", weight: 1 }, // +JP
+            { id: 36, text: "自分の記憶は事実そのものというより、美化された物語かもしれないと思う。", type: "SN", weight: 1 }, // +SN
+            { id: 37, text: "感情は頭で理解するものではなく、胸やお腹などの身体感覚として感じる。", type: "TF", weight: 1 }, // +TF
+            { id: 38, text: "夢（睡眠時）の内容を、色彩や感覚まで鮮明に覚えていることが多い。", type: "V", weight: 1 }, // +V
+            { id: 39, text: "音楽を聴くと、歌詞の意味より先に色や風景が浮かぶ。", type: "M", weight: 1 }, // +M
+            { id: 40, text: "「愛」という言葉から連想するのは、具体的な行動より、色や温度などの抽象的なイメージだ。", type: "M", weight: 1 }, // +M
+
+            // Phase 8: Final Essence
+            { id: 41, text: "人生は「戦い」ではなく「旅」である。", type: "TF", weight: 1 },
+            { id: 42, text: "欲しいのは「確実な安定」より「無限の可能性」だ。", type: "SN", weight: 1 },
+            { id: 43, text: "自分自身を「理解している」というより「探求中」だと感じる。", type: "EI", weight: 1 }, // +EI (Openness?) -> Let's map to Intuition/Perceiving broadly, but keep EI for now as "External search"
+            { id: 44, text: "言葉は単なる「道具」ではなく、世界を変える「魔法」だと思う。", type: "M", weight: 1 },
+            { id: 45, text: "夜空を見上げた時、星の配置より宇宙の広大さに圧倒される。", type: "SN", weight: 1 },
+            { id: 46, text: "約束は絶対守るべきものというより、その時の最善を尽くすための目標だ。", type: "JP", weight: 1 },
+            { id: 47, text: "他者は自分とは異なる個体というより、深いところで繋がっている存在だと感じる。", type: "TF", weight: 1 },
+            { id: 48, text: "過去は変えられない事実ではなく、今の解釈次第で変わる物語だ。", type: "SN", weight: 1 },
+            { id: 49, text: "未来は予測するものというより、自らの手で創造するものだ。", type: "JP", weight: 1 },
+            { id: 50, text: "今この瞬間は、単なる通過点ではなく、永遠の一部だと感じる。", type: "M", weight: 1 }
+        ];
+
+        const RESULT_ARCHETYPES = {
+            // Introverted types
+            "ISTJ": { name: "The Archivist", jp: "静寂の記録者", color: "from-slate-200 to-blue-200", desc: "事実と経験を重んじる、堅実で誠実な守護者。" },
+            "ISFJ": { name: "The Protector", jp: "慈愛の守り人", color: "from-blue-100 to-pink-200", desc: "献身的で温かい心を持ち、大切な人を守り抜く。" },
+            "INFJ": { name: "The Oracle", jp: "深淵の賢者", color: "from-purple-200 to-indigo-300", desc: "理想と洞察力を持ち、人々の導き手となる。" },
+            "INTJ": { name: "The Architect", jp: "孤高の設計者", color: "from-indigo-200 to-slate-300", desc: "独創的なビジョンと論理で、世界を再構築する。" },
+            "ISTP": { name: "The Artisan", jp: "孤高の匠", color: "from-slate-200 to-teal-200", desc: "冷静な観察眼と器用さで、問題を解決する。" },
+            "ISFP": { name: "The Artist", jp: "感性の旅人", color: "from-green-100 to-yellow-200", desc: "豊かな感性と優しさで、世界に彩りを与える。" },
+            "INFP": { name: "The Healer", jp: "夢見る癒し手", color: "from-pink-200 to-purple-200", desc: "純粋な理想と共感力で、人々の心を癒やす。" },
+            "INTP": { name: "The Logician", jp: "真理の探究者", color: "from-blue-200 to-cyan-200", desc: "飽くなき知的好奇心で、世界の理を解き明かす。" },
+            // Extroverted types
+            "ESTP": { name: "The Dynamo", jp: "疾風の冒険者", color: "from-orange-200 to-red-200", desc: "エネルギーに溢れ、今この瞬間を全力で生きる。" },
+            "ESFP": { name: "The Performer", jp: "太陽の演者", color: "from-yellow-200 to-orange-200", desc: "周囲を明るく照らし、人生を祭りとして楽しむ。" },
+            "ENFP": { name: "The Champion", jp: "自由な革命家", color: "from-green-200 to-blue-200", desc: "情熱と想像力で、人々に可能性を見せる。" },
+            "ENTP": { name: "The Debater", jp: "知的な挑戦者", color: "from-red-200 to-purple-200", desc: "鋭い頭脳と弁舌で、常識を覆していく。" },
+            "ESTJ": { name: "The Director", jp: "不屈の指揮官", color: "from-blue-200 to-indigo-200", desc: "秩序と伝統を重んじ、組織を力強く導く。" },
+            "ESFJ": { name: "The Caregiver", jp: "調和の提供者", color: "from-pink-200 to-red-100", desc: "細やかな気配りで、人々の絆を深める。" },
+            "ENFJ": { name: "The Protagonist", jp: "希望の先導者", color: "from-orange-100 to-purple-200", desc: "カリスマ性と共感力で、人々を理想へ導く。" },
+            "ENTJ": { name: "The Commander", jp: "覇道の統率者", color: "from-red-200 to-slate-300", desc: "鉄の意志と戦略で、不可能を可能にする。" }
+        };
+
+        // --- Components ---
+
+        const TwinSimulation = ({ myType, otherType, onComplete }) => {
+            const [logs, setLogs] = useState([]);
+            const [progress, setProgress] = useState(0);
+
+            useEffect(() => {
+                const conversation = [
+                    { t: 0, speaker: "me", text: "接続を開始します..." },
+                    { t: 1000, speaker: "other", text: "応答を確認。同期レベル計測中..." },
+                    { t: 2500, speaker: "me", text: `私は${myType.jp}。私の特性データを送信します。` },
+                    { t: 4000, speaker: "other", text: `受信しました。私は${otherType.jp}。興味深いパターンですね。` },
+                    { t: 6000, speaker: "me", text: "私たちの相性はどうでしょうか？思考回路の干渉をチェックします。" },
+                    { t: 8000, speaker: "other", text: "補完関係にあるようです。あなたの弱点を私がカバーできるかもしれません。" },
+                    { t: 10000, speaker: "sys", text: "MATCHING COMPLETE" }
+                ];
+
+                let timeouts = [];
+                conversation.forEach(line => {
+                    timeouts.push(setTimeout(() => {
+                        setLogs(prev => [...prev, line]);
+                        if (line.speaker === 'sys') {
+                            setTimeout(onComplete, 1500);
+                        }
+                    }, line.t));
+                });
+
+                const interval = setInterval(() => {
+                    setProgress(p => Math.min(p + 1, 100));
+                }, 100);
+
+                return () => {
+                    timeouts.forEach(clearTimeout);
+                    clearInterval(interval);
+                };
+            }, []);
+
+            return (
+                <div className="absolute inset-0 bg-slate-900/90 z-50 flex flex-col items-center justify-center p-6 backdrop-blur-xl">
+                    <div className="w-full max-w-xs relative h-64 mb-8">
+                        {/* My Twin */}
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 animate-float">
+                            <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${myType.color} blur-md absolute opacity-50`}></div>
+                            <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center text-2xl shadow-lg relative z-10 border-2 border-white">
+                                💎
+                            </div>
+                            <p className="text-white text-[10px] text-center mt-2 opacity-80">YOU</p>
+                        </div>
+
+                        {/* Connection Line */}
+                        <div className="absolute left-20 right-20 top-1/2 h-0.5 bg-gradient-to-r from-purple-500 to-blue-500 opacity-50">
+                            <div className="absolute top-0 bottom-0 bg-white w-2 animate-ping" style={{ left: `${progress}%` }}></div>
+                        </div>
+
+                        {/* Other Twin */}
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 animate-float" style={{ animationDelay: '-1s' }}>
+                            <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${otherType.color} blur-md absolute opacity-50`}></div>
+                            <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center text-2xl shadow-lg relative z-10 border-2 border-white">
+                                👤
+                            </div>
+                            <p className="text-white text-[10px] text-center mt-2 opacity-80">TARGET</p>
+                        </div>
+                    </div>
+
+                    {/* Log Console */}
+                    <div className="w-full bg-black/50 rounded-xl p-4 h-48 overflow-y-auto font-mono text-xs space-y-2 border border-white/10">
+                        {logs.map((l, i) => (
+                            <div key={i} className={`animate-fade-in ${l.speaker === 'me' ? 'text-purple-300' : l.speaker === 'other' ? 'text-blue-300' : 'text-green-400 font-bold text-center'}`}>
+                                <span className="opacity-50">[{new Date().toLocaleTimeString()}]</span> {l.speaker !== 'sys' && <span className="font-bold">{l.speaker === 'me' ? 'YOU' : 'TWIN'}: </span>}
+                                {l.text}
+                            </div>
+                        ))}
+                        <div ref={el => el && el.scrollIntoView({ behavior: "smooth" })} />
+                    </div>
+                </div>
+            );
+        };
+
+        const TwinScreen = () => {
+            const [input, setInput] = useState("");
+            const [chat, setChat] = useState([
+                { id: 1, sender: "twin", text: "こんにちは。今日の心の天気はどうですか？" }
+            ]);
+            const scrollRef = useRef(null);
+
+            useEffect(() => {
+                if (scrollRef.current) {
+                    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                }
+            }, [chat]);
+
+            const send = () => {
+                if (!input.trim()) return;
+                setChat([...chat, { id: Date.now(), sender: "me", text: input }]);
+                setInput("");
+                setTimeout(() => {
+                    setChat(prev => [...prev, { id: Date.now() + 1, sender: "twin", text: "なるほど...その感情は大切に記録しておきますね。あなたの「デジタルツイン」がまた一つ成長しました。" }]);
+                }, 1000);
+            };
+
+            return (
+                <div className="flex flex-col h-full relative animate-fade-in">
+                    <div className="h-[35%] flex flex-col items-center justify-center relative">
+                        <div className="w-48 h-48 rounded-full bg-gradient-to-tr from-purple-300 via-pink-300 to-blue-300 blur-xl opacity-60 absolute animate-pulse"></div>
+                        <div className="w-32 h-32 rounded-full bg-gradient-to-b from-white to-purple-100 shadow-lg z-10 animate-float flex items-center justify-center">
+                            <div className="w-28 h-28 rounded-full bg-white/80 backdrop-blur flex items-center justify-center">
+                                <div className="text-4xl opacity-50">✨</div>
+                            </div>
+                        </div>
+                        <div className="mt-4 z-10 text-center">
+                            <h2 className="text-slate-600 text-sm font-bold tracking-widest">MY TWIN</h2>
+                            <p className="text-slate-400 text-[10px]">Sync Level: 12%</p>
+                        </div>
+                    </div>
+                    <div className="flex-1 glass rounded-t-[2.5rem] shadow-inner flex flex-col overflow-hidden">
+                        <div className="flex-1 p-4 overflow-y-auto no-scrollbar space-y-4" ref={scrollRef}>
+                            {chat.map(c => (
+                                <div key={c.id} className={`flex ${c.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm shadow-sm ${c.sender === 'me' ? 'bg-purple-500 text-white rounded-br-none' : 'bg-white text-slate-600 rounded-bl-none'
+                                        }`}>
+                                        {c.text}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="p-4 pb-28 bg-white/50 z-20 relative">
+                            <div className="flex items-center bg-white rounded-full px-4 py-3 shadow-md border border-slate-100">
+                                <input
+                                    className="flex-1 bg-transparent outline-none text-sm text-slate-600"
+                                    placeholder="感情を入力..."
+                                    value={input}
+                                    onChange={e => setInput(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && send()}
+                                />
+                                <button onClick={send} className="text-purple-400 hover:text-purple-600 p-1">
+                                    <Icon name="Send" size={20} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const DiagnosisScreen = () => {
+            const [state, setState] = useState('intro'); // intro, question, calculating, result
+            const [qIndex, setQIndex] = useState(0);
+            const [scores, setScores] = useState({ EI: 0, SN: 0, TF: 0, JP: 0, V: 0, M: 0 });
+            const [result, setResult] = useState(null);
+
+            const startDiagnosis = () => {
+                setQIndex(0);
+                setScores({ EI: 0, SN: 0, TF: 0, JP: 0, V: 0, M: 0 });
+                setState('question');
+            };
+
+            const answer = (val) => {
+                const newScores = { ...scores };
+                Object.keys(val).forEach(k => newScores[k] += val[k]);
+                setScores(newScores);
+
+                if (qIndex < QUESTIONS.length - 1) {
+                    setQIndex(qIndex + 1);
+                } else {
+                    setState('calculating');
+                    setTimeout(() => calculateResult(newScores), 2000);
+                }
+            };
+
+            const calculateResult = (finalScores) => {
+                // Determine MBTI
+                const e_i = finalScores.EI >= 0 ? "E" : "I";
+                const s_n = finalScores.SN >= 0 ? "N" : "S"; // Note: In my logic +SN is N (Abstract), -SN is S (Concrete)
+                const t_f = finalScores.TF >= 0 ? "F" : "T"; // +TF is F (Feeling)
+                const j_p = finalScores.JP >= 0 ? "P" : "J"; // +JP is P (Perceiving)
+                const mbti = e_i + s_n + t_f + j_p;
+
+                const archetype = RESULT_ARCHETYPES[mbti] || RESULT_ARCHETYPES["INFJ"];
+
+                // Determine Texture
+                let texture = "Standard";
+                if (finalScores.V > 5) texture = "Hyperphantasia (超鮮明)";
+                else if (finalScores.V < -5) texture = "Aphantasia (概念的)";
+
+                setResult({
+                    ...archetype,
+                    mbti,
+                    scores: finalScores,
+                    texture
+                });
+                setState('result');
+            };
+
+            if (state === 'intro') {
+                return (
+                    <div className="h-full p-8 flex flex-col items-center justify-center animate-fade-in pb-28 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-transparent to-white/80 z-0"></div>
+                        <div className="z-10 text-center mb-12">
+                            <div className="w-24 h-24 bg-white rounded-full shadow-xl flex items-center justify-center text-4xl mb-6 mx-auto animate-float">
+                                🔮
+                            </div>
+                            <h1 className="text-3xl font-bold text-slate-700 mb-3 tracking-tight">Deep Dive</h1>
+                            <p className="text-sm text-slate-500 leading-relaxed">
+                                50の問いかけによる、<br />あなた自身との対話。<br />
+                                <span className="text-xs opacity-70 mt-2 block">MBTI × 思考の癖 × 記憶の質感</span>
+                            </p>
+                        </div>
+                        <button onClick={startDiagnosis} className="z-10 w-full py-4 bg-slate-800 text-white rounded-2xl shadow-lg hover:bg-slate-700 transition-all font-bold text-lg flex items-center justify-center gap-2 group">
+                            <span>対話を始める</span>
+                            <Icon name="Send" size={18} className="group-hover:translate-x-1 transition-transform" />
+                        </button>
+                    </div>
+                );
+            }
+
+            if (state === 'question') {
+                const q = QUESTIONS[qIndex];
+                const progress = ((qIndex + 1) / QUESTIONS.length) * 100;
+                return (
+                    <div className="h-full flex flex-col pt-10 px-6 pb-28 animate-fade-in">
+                        <div className="w-full h-1 bg-slate-100 rounded-full mb-8 overflow-hidden">
+                            <div className="h-full bg-purple-400 transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                        </div>
+
+                        <div className="flex-1 flex flex-col justify-center">
+                            <span className="text-purple-400 font-bold text-xs tracking-widest mb-4">QUESTION {qIndex + 1} / {QUESTIONS.length}</span>
+                            <h2 className="text-xl font-bold text-slate-700 mb-10 leading-relaxed">{q.text}</h2>
+
+                            <div className="space-y-3">
+                                {q.options.map((opt, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => answer(opt.val)}
+                                        className="w-full p-4 bg-white border border-slate-100 rounded-xl text-left text-slate-600 text-sm shadow-sm hover:border-purple-300 hover:bg-purple-50 transition-all active:scale-95"
+                                    >
+                                        {opt.text}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (state === 'calculating') {
+                return (
+                    <div className="h-full flex flex-col items-center justify-center pb-28">
+                        <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-500 rounded-full animate-spin mb-4"></div>
+                        <p className="text-slate-500 text-sm animate-pulse">あなたの本質を分析中...</p>
+                    </div>
+                );
+            }
+
+            if (state === 'result' && result) {
+                return (
+                    <div className="h-full flex flex-col items-center animate-slide-up overflow-y-auto no-scrollbar pb-32 px-6 pt-6">
+                        <button onClick={() => setState('intro')} className="absolute top-6 right-6 p-2 bg-white/50 rounded-full z-10 hover:bg-white">
+                            <Icon name="Refresh" size={20} color="#A0AEC0" />
+                        </button>
+
+                        <h2 className="text-slate-400 text-[10px] font-bold tracking-widest mb-6 mt-4">ANALYSIS COMPLETE</h2>
+
+                        {/* Main Card */}
+                        <div className="w-full bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-8 shadow-2xl border border-white relative overflow-hidden group mb-6">
+                            <div className={`absolute top-0 left-0 w-full h-48 bg-gradient-to-br ${result.color} opacity-40`}></div>
+
+                            <div className="relative z-10 flex flex-col items-center text-center mt-4">
+                                <div className="w-24 h-24 bg-white rounded-full shadow-xl flex items-center justify-center text-4xl mb-4 ring-4 ring-white/50">💎</div>
+                                <span className="bg-slate-800 text-white px-3 py-1 rounded-full text-[10px] font-bold tracking-widest mb-3">{result.mbti}</span>
+                                <h1 className="text-2xl font-bold text-slate-800 mb-1">{result.jp}</h1>
+                                <p className="text-xs text-slate-500 font-medium mb-6">{result.name}</p>
+
+                                <p className="text-sm text-slate-600 leading-relaxed bg-white/60 p-4 rounded-2xl mb-6 border border-white/50">
+                                    {result.desc}
+                                </p>
+
+                                {/* Stats Grid */}
+                                <div className="w-full grid grid-cols-2 gap-3">
+                                    <div className="bg-slate-50 p-3 rounded-2xl text-left border border-slate-100">
+                                        <p className="text-[10px] text-slate-400 font-bold mb-1">MEMORY TEXTURE</p>
+                                        <p className="text-xs font-bold text-slate-700">{result.texture}</p>
+                                    </div>
+                                    <div className="bg-slate-50 p-3 rounded-2xl text-left border border-slate-100">
+                                        <p className="text-[10px] text-slate-400 font-bold mb-1">THINKING STYLE</p>
+                                        <p className="text-xs font-bold text-slate-700">{result.scores.M > 0 ? "Conceptual (概念)" : "Verbal (言語)"}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Detailed Analysis */}
+                        <div className="w-full space-y-4">
+                            <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-50">
+                                <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                    <span className="w-1 h-4 bg-purple-400 rounded-full"></span>
+                                    思考の癖
+                                </h3>
+                                <p className="text-xs text-slate-500 leading-relaxed">
+                                    {result.scores.M > 0
+                                        ? "あなたは言葉よりも先に「イメージ」や「感覚」で物事を捉えるタイプです。論理的な説明よりも、比喩や全体像の把握を好みます。"
+                                        : "あなたは頭の中で「言葉」を使って思考を組み立てるタイプです。論理的な整合性を重視し、言語化することで理解を深めます。"}
+                                </p>
+                            </div>
+
+                            <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-50">
+                                <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                    <span className="w-1 h-4 bg-blue-400 rounded-full"></span>
+                                    記憶の質感
+                                </h3>
+                                <p className="text-xs text-slate-500 leading-relaxed">
+                                    {result.scores.V > 0
+                                        ? "あなたの記憶は鮮明な映像として保存されています。過去の出来事を映画のように再生したり、架空の風景をありありと想像することができます。"
+                                        : "あなたの記憶は事実や意味のネットワークとして保存されています。映像的なノイズに惑わされず、本質的な情報を抽出することに長けています。"}
+                                </p>
+                            </div>
+                        </div>
+
+                        <button className="mt-8 w-full bg-slate-800 text-white px-8 py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 hover:scale-105 transition-transform">
+                            <Icon name="Share" size={18} color="white" /> 結果をシェアする
+                        </button>
+                    </div>
+                );
+            }
+            return null;
+        };
+
+        const MatchScreen = () => {
+            const [feed, setFeed] = useState([
+                { id: 1, name: "Anonymous A", type: "Visionary", jp: "孤高の設計者", sos: "企画", text: "新しいサービスを思いついたけど、具体的なスケジュールに落とし込めない...", color: "from-indigo-200 to-slate-300" },
+                { id: 2, name: "Anonymous B", type: "Artist", jp: "感性の旅人", sos: "発信", text: "作品には自信があるのに、SNSでどう言葉にしていいか分からない。", color: "from-green-100 to-yellow-200" },
+                { id: 3, name: "Anonymous C", type: "Leader", jp: "不屈の指揮官", sos: "傾聴", text: "強い言葉でチームを引っ張りすぎて疲弊させてしまった。", color: "from-blue-200 to-indigo-200" }
+            ]);
+            const [simulating, setSimulating] = useState(null); // ID of user being simulated
+
+            const handleConnect = (target) => {
+                setSimulating(target);
+            };
+
+            const handleSimulationComplete = () => {
+                setFeed(feed.filter(f => f.id !== simulating.id));
+                setSimulating(null);
+                alert("マッチングが成立しました。連絡先が交換されました。");
+            };
+
+            return (
+                <div className="h-full flex flex-col relative animate-fade-in">
+                    {simulating && (
+                        <TwinSimulation
+                            myType={{ jp: "夢見る癒し手", color: "from-pink-200 to-purple-200" }} // Mock user type
+                            otherType={simulating}
+                            onComplete={handleSimulationComplete}
+                        />
+                    )}
+
+                    <div className="px-6 pt-6 pb-2 bg-white/50 backdrop-blur z-10">
+                        <h1 className="text-xl font-bold text-slate-700">Twin Match</h1>
+                        <p className="text-xs text-slate-500">デジタルツイン同士を対話させる</p>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-32 no-scrollbar">
+                        {feed.length === 0 ? (
+                            <div className="text-center py-20 text-slate-400">No more signals...</div>
+                        ) : feed.map(item => (
+                            <div key={item.id} className="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100 animate-slide-up">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${item.color} flex items-center justify-center text-xl shadow-inner`}>👤</div>
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-700">{item.jp}</p>
+                                            <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-bold">SOS: {item.sos}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p className="text-sm text-slate-600 leading-relaxed mb-4 bg-slate-50 p-3 rounded-xl">"{item.text}"</p>
+                                <button
+                                    onClick={() => handleConnect(item)}
+                                    className="w-full py-3 bg-white border-2 border-purple-100 text-purple-500 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-purple-50 transition-colors"
+                                >
+                                    <Icon name="Refresh" size={14} /> ツイン同士を会わせる
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [tab, setTab] = useState('home');
+
+            return (
+                <div className="w-full max-w-md h-[100dvh] sm:h-[800px] bg-gradient-to-br from-slate-50 via-purple-50 to-blue-50 sm:rounded-[3rem] sm:border-8 border-white shadow-2xl overflow-hidden relative flex flex-col font-sans">
+
+                    {/* Top Bar */}
+                    <div className="h-14 flex items-center justify-between px-6 pt-2 shrink-0 z-20">
+                        <span className="font-bold text-slate-400 text-xs tracking-widest">MindAxis</span>
+                        <div className="flex gap-1">
+                            <div className="w-2 h-2 rounded-full bg-slate-300"></div>
+                            <div className="w-2 h-2 rounded-full bg-slate-300"></div>
+                        </div>
+                    </div>
+
+                    {/* Content Area */}
+                    <div className="flex-1 overflow-hidden relative z-10">
+                        {tab === 'home' && <TwinScreen />}
+                        {tab === 'diag' && <DiagnosisScreen />}
+                        {tab === 'match' && <MatchScreen />}
+                    </div>
+
+                    {/* Bottom Navigation (Floating) */}
+                    <div className="absolute bottom-6 left-6 right-6 h-16 glass rounded-full flex items-center justify-around shadow-xl z-50">
+                        <button onClick={() => setTab('home')} className={`p-3 rounded-full transition ${tab === 'home' ? 'text-purple-500 bg-purple-50' : 'text-slate-400'}`}>
+                            <Icon name="Home" size={24} />
+                        </button>
+                        <button onClick={() => setTab('diag')} className={`p-3 rounded-full transition ${tab === 'diag' ? 'text-purple-500 bg-purple-50' : 'text-slate-400'}`}>
+                            <Icon name="Feather" size={24} />
+                        </button>
+                        <button onClick={() => setTab('match')} className={`p-3 rounded-full transition ${tab === 'match' ? 'text-purple-500 bg-purple-50' : 'text-slate-400'}`}>
+                            <Icon name="HeartHand" size={24} />
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>
